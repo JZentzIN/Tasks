@@ -73,7 +73,7 @@
                 '<button id="bCanc" type="button" class="btn btn-sm btn-default" style="display: block;" onclick="rowCancel(this);"><span class="glyphicon glyphicon-remove"> </span></button></div ></td>';
         $('table > tbody:last-child').append('<tr id="editing"><td class="idCol" style="display:none;">' + newID.toString()+'</td><td><input name="cbComplete" type="checkbox" class="cb" onClick="SaveTask(this);" /></td>' + editTextBoxCombined+editButtons+'</tr>');
     });
-    localStorage.clear();
+    //localStorage.clear();
     $(function () {
         $(".datepicker").datepicker({
             dateFormat: "mm/dd/yyyy"
