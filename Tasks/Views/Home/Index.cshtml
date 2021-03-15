@@ -1,0 +1,249 @@
+﻿@page
+@model IndexModel
+
+
+
+<style>
+    .completed {
+        text-decoration: line-through;
+    }
+    .container {
+        /*margin: 150px auto;*/
+    }
+   
+    .outer {
+        white-space: nowrap;
+    }
+
+    .inner {
+        display: inline-block;
+    }
+    .strikethrough {
+        background: repeating-linear-gradient( 180deg, red 0%, red 100% );
+        background-size: 100% 2px;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+    .idCol {
+        display:none;
+    }
+</style>
+<div class="row container" style="padding-top: 10px;">
+    <div class="col-md-12">
+        <div class="outer" style="font-size:18px;">Daily Tasks for <div class="inner" id="UserName"></div></div>
+    </div>
+</div>
+<div class="row container" style="padding-top:10px;">
+    <div class="col-md-12">
+        <table id="taskTable" class="table table-bordered strike-able sorting">
+            <thead>
+                <tr>
+                    <th class="idCol">ID</th>
+                    <th>Complete</th>
+                    <th>Due Date</th>
+                    <th>Task</th>
+                </tr>
+            </thead>
+            <tbody>
+               
+            </tbody>
+        </table>
+        <span>
+            <a id="add_row" class="btn btn-default pull-left">Add Row</a>
+        </span>
+    </div>
+</div>
+
+<script>
+    var lastID = 0;
+    var taskTable = $('table');
+        $('table').SetEditable({
+            columnsEd: "2,3"
+        });
+    $("#add_row").click(function () {
+        var newID = lastID + 1;
+        var editTextBox1 = '<td><div style="display: none;"></div><input id="datepicker"'+newID.toString()+'" class="datepicker form-control input-sm" value="" ></td>';
+        //var editTextBox1 = '<td><div style="display: none;"></div><input form-control input-sm" value="" ></td>';
+            var editTextBox2 = '<td><div style="display: none;"></div><input class="form-control input-sm" value=""></td>';
+            var editTextBoxCombined = editTextBox1 + editTextBox2;
+            var editButtons = '<td name="buttons"><div class="btn-group pull-right">'+
+                '<button id = "bEdit" type = "button" class="btn btn-sm btn-default" onclick = "rowEdit(this);" style = "display: none;" > <span class="glyphicon glyphicon-pencil"> </span></button>'+
+                '<button id="bElim" type="button" class="btn btn-sm btn-default" onclick="rowElim(this);DeleteTask(this);" style="display: none;"><span class="glyphicon glyphicon-trash"> </span></button>' +
+                '<button id="bAcep" type="button" class="btn btn-sm btn-default" style="display: block;" onclick="rowAcep(this);SaveTask(this);"><span class="glyphicon glyphicon-ok"> </span></button>' +
+                '<button id="bCanc" type="button" class="btn btn-sm btn-default" style="display: block;" onclick="rowCancel(this);"><span class="glyphicon glyphicon-remove"> </span></button></div ></td>';
+        $('table > tbody:last-child').append('<tr id="editing"><td class="idCol" style="display:none;">' + newID.toString()+'</td><td><input name="cbComplete" type="checkbox" class="cb" onClick="SaveTask(this);" /></td>' + editTextBoxCombined+editButtons+'</tr>');
+    });
+    localStorage.clear();
+    $(function () {
+        $(".datepicker").datepicker({
+            dateFormat: "mm/dd/yyyy"
+        }).val();
+    });
+   
+    $('body').on('focus', ".datepicker", function () {
+        $(this).datepicker();
+    });
+
+    PopulateUser();
+    PopulateExtraTasks();
+    function SaveTask(item) {
+        var $row = $(item).parents('tr');
+        var id = $row.find('td').eq(0).html();
+        var completeTd = $row.find('td').eq(1);
+        var dueDateTd = $row.find('td').eq(2);
+        var dueDate = $row.find('td').eq(2).html();
+        var taskTd = $row.find('td').eq(3);
+        var task = $row.find('td').eq(3).html();
+
+        var cbVal = completeTd.find('input:checkbox');
+        var complete = false;
+        if (cbVal !== undefined && cbVal.is(':checked')) {
+            complete = true;
+            dueDateTd.addClass("completed");
+            taskTd.addClass("completed");
+        } else {
+            dueDateTd.removeClass("completed");
+            taskTd.removeClass("completed");
+        }
+        lastID = id;
+        localStorage.setItem('TaskStorageCount',id.toString());
+        var obj = { id: id, name: task, dueDate: new Date(dueDate), dueDateString: dueDate, complete: complete };
+        localStorage.setItem(id, JSON.stringify(obj));
+        $.post("/Home/Save",
+            {
+                id: id,
+                dueDate: dueDate,
+                task: task,
+                complete: complete
+            }, function (returnedData) {
+            }).fail(function () {
+            }).success(function (data) {
+            });
+    }
+    function DeleteTask(item) {
+        var $row = $(item).parents('tr');
+        var id = $row.find('td').eq(0).html();
+        localStorage.removeItem(id);
+        $.post("/Home/Delete",
+            {
+                id: id
+            }, function (returnedData) {
+            }).fail(function () {
+            });
+    }
+    function PopulateUser() {
+        $.ajax({
+            type: "GET",
+            url: '@Url.Action("GetUserDetails")',
+            data: {
+            },
+            dataType: "json",
+            success: function (data) {
+
+                $('#UserName').html(data);
+            }
+        });
+    }
+    function PopulateExtraTasks() {
+        /*
+         * Note: I've never used local storage before and thought it would 
+         * be fun to try that out here.  If items not found in storage, get
+         * "new" from database.  For this case just getting hard coded list from
+         * code.
+         */
+        var data = localStorage.getItem('TaskStorageCount');
+        if (data == null) {
+            //object not found in storage, get new values
+            GetTasks();
+        } else {
+            var count = parseInt(localStorage.getItem('TaskStorageCount'));
+            if (count == 0) {
+                GetTasks();
+            }
+            for (i = 1; i < count+1; i++) {
+                var orig = localStorage.getItem(i);
+                var parsedData = $.parseJSON(orig);
+                FormatTaskFromStorage(parsedData);
+            }
+        }
+    }
+
+    function GetTasks() {
+        $.ajax({
+            type: "GET",
+            url: '@Url.Action("GetAdditionalTasks")',
+            data: {
+
+            },
+            dataType: "json",
+            success: function (orig) {
+                localStorage.clear();
+                var parsedData = $.parseJSON(orig);
+                FormatTasks(parsedData);
+            }
+        });
+    }
+
+    function FormatTasks(data) {
+        var ind = 0;
+        jQuery.each(data, function (index, value) {          
+            ind++;
+            var id = value.id;
+            localStorage.setItem(id, JSON.stringify(value));
+            
+            var name = value.name;
+            var complete = value.complete;
+            var dueDate = value.dueDateString;
+            var idTD = '<td class="idCol">' + id + '</td>';
+            lastID = id;
+            var completedClass;
+            var completeTD;
+            if (complete) {
+                completedClass = "completed";
+                completeTD = '<td><input type="checkbox" name="cbComplete" class="cb" onClick="SaveTask(this);" checked /></td>';
+            } else {
+                completeTD = '<td><input type="checkbox" name="cbComplete" class="cb" onClick="SaveTask(this);" /></td>';
+            }
+            var editTextBox1 = '<td class="' + completedClass + '">' + dueDate + '</td>';
+            var editTextBox2 = '<td class="' + completedClass + '">' + name + '</td>';
+            var editTextBoxCombined = editTextBox1 + editTextBox2;
+            var editButtons = '<td name="buttons"><div class="btn-group pull-right">' +
+                '<button id = "bEdit" type = "button" class="btn btn-sm btn-default" onclick = "rowEdit(this);" style = "display: block;" > <span class="glyphicon glyphicon-pencil"> </span></button>' +
+                '<button id="bElim" type="button" class="btn btn-sm btn-default" onclick="rowElim(this);DeleteTask(this);" style="display: block;DeleteTask(this);"><span class="glyphicon glyphicon-trash"> </span></button>' +
+                '<button id="bAcep" type="button" class="btn btn-sm btn-default" style="display: none;" onclick="rowAcep(this);SaveTask(this);"><span class="glyphicon glyphicon-ok"> </span></button>' +
+                '<button id="bCanc" type="button" class="btn btn-sm btn-default" style="display: none;" onclick="rowCancel(this);"><span class="glyphicon glyphicon-remove"> </span></button></div ></td>';
+            $('table > tbody:last-child').append('<tr>' + idTD + completeTD + editTextBoxCombined + editButtons + '</tr>');
+        });
+        var taskCount = ind;
+        localStorage.setItem('TaskStorageCount', taskCount);
+    }
+
+    function FormatTaskFromStorage(value) {
+        if (value != null) {
+            var id = value.id;
+            var name = value.name;
+            var complete = value.complete;
+            var dueDate = value.dueDateString;
+            var idTD = '<td class="idCol">' + id + '</td>';
+            lastID = id;
+            var completedClass;
+            var completeTD;
+            if (complete) {
+                completedClass = "completed";
+                completeTD = '<td><input type="checkbox" name="cbComplete" class="cb" onClick="SaveTask(this);" checked /></td>';
+            } else {
+                completeTD = '<td><input type="checkbox" name="cbComplete" class="cb" onClick="SaveTask(this);" /></td>';
+            }
+            var editTextBox1 = '<td class="' + completedClass + '">' + dueDate + '</td>';
+            var editTextBox2 = '<td class="' + completedClass + '">' + name + '</td>';
+            var editTextBoxCombined = editTextBox1 + editTextBox2;
+            var editButtons = '<td name="buttons"><div class="btn-group pull-right">' +
+                '<button id = "bEdit" type = "button" class="btn btn-sm btn-default" onclick = "rowEdit(this);" style = "display: block;" > <span class="glyphicon glyphicon-pencil"> </span></button>' +
+                '<button id="bElim" type="button" class="btn btn-sm btn-default" onclick="rowElim(this);DeleteTask(this);" style="display: block;DeleteTask(this);"><span class="glyphicon glyphicon-trash"> </span></button>' +
+                '<button id="bAcep" type="button" class="btn btn-sm btn-default" style="display: none;" onclick="rowAcep(this);SaveTask(this);"><span class="glyphicon glyphicon-ok"> </span></button>' +
+                '<button id="bCanc" type="button" class="btn btn-sm btn-default" style="display: none;" onclick="rowCancel(this);"><span class="glyphicon glyphicon-remove"> </span></button></div ></td>';
+            $('table > tbody:last-child').append('<tr>' + idTD + completeTD + editTextBoxCombined + editButtons + '</tr>');
+        }
+        
+    }
+</script>
